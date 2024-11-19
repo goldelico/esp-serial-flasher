@@ -18,9 +18,10 @@
 
 #endif
 
-#define PI_OUTPUT 1
+// #define PI_OUTPUT 1
 
 int gpioInitialise(void);
 int gpioSetMode(int pin, int mode);
 int gpioTerminate(void);
 int gpioWrite(int pin, int value);
+int gpioDelay(int us);
