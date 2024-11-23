@@ -21,37 +21,54 @@
 #define TARGET_IO0_Pin 3
 
 #define DEFAULT_BAUD_RATE 115200
-#define HIGHER_BAUD_RATE  460800
+// #define HIGHER_BAUD_RATE  460800
+#define HIGHER_BAUD_RATE  DEFAULT_BAUD_RATE
+#ifdef __APPLE__
+// #define SERIAL_DEVICE     "/dev/cu.usbserial-FTH9L0T7"
+#define SERIAL_DEVICE     "/dev/cu.usbserial-FT76GT23"
+#else
 #define SERIAL_DEVICE     "/dev/ttyS1"
+#endif
 
-int serOpen(char *device, int baudrate, int unused)
+void usage(char *arg0)
 {
-	return -1;
+	fprintf(stderr, "usage: %s [-b###] [-d/dev/tty]\n", arg0);
+	fprintf(stderr, "  -b### set baud rate\n");
+	fprintf(stderr, "  -d### set serial device\n");
+	exit(1);
 }
 
-int serReadByte(int fd)
-{
-
-}
-
-#define PI_SER_READ_NO_DATA -1
-
-int main(void)
+int main(int argc, char *argv[])
 {
     example_binaries_t bin;
 
-    const loader_raspberry_config_t config = {
+    loader_raspberry_config_t config = {
         .device = SERIAL_DEVICE,
         .baudrate = DEFAULT_BAUD_RATE,
         .reset_trigger_pin = TARGET_RST_Pin,
         .gpio0_trigger_pin = TARGET_IO0_Pin,
     };
 
+	char *arg0=argv[0];
+	while(argv[1] && argv[1][0] == '-') {
+		switch(argv[1][1])
+			{
+				case 'b': config.baudrate=atoi(argv[1]+2); argv++; break;
+				case 'd': config.device=argv[1]+2; argv++; break;
+				default: usage(arg0);
+			}
+	}
+
+	if(argv[1])
+		usage(arg0);
+
     loader_port_raspberry_init(&config);
+
+	printf("Connecting through %s at %u and %u\n", config.device, config.baudrate, HIGHER_BAUD_RATE);
 
     if (connect_to_target(HIGHER_BAUD_RATE) == ESP_LOADER_SUCCESS) {
 
-        get_example_binaries(esp_loader_get_target(), &bin);
+		get_example_binaries(esp_loader_get_target(), &bin);
 
         printf("Loading bootloader...\n");
         flash_binary(bin.boot.data, bin.boot.size, bin.boot.addr);
@@ -69,7 +86,7 @@ int main(void)
             return 1;
         }
 
-        int serial = serOpen(SERIAL_DEVICE, DEFAULT_BAUD_RATE, 0);
+        int serial = serOpen(config.device, config.baudrate, 0);
         if (serial < 0) {
             printf("Serial port could not be opened!\n");
         }
