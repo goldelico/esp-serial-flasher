@@ -1,5 +1,7 @@
 /* hardeware/gpio.h */
 
+#include <stdint.h>
+
 #ifdef __APPLE__
 
 /* speed constants not directly supported by macOS */
@@ -18,10 +20,29 @@
 
 #endif
 
-// #define PI_OUTPUT 1
+#define PI_OFF   0
+#define PI_ON    1
+
+#define PI_CLEAR 0
+#define PI_SET   1
+
+#define PI_LOW   0
+#define PI_HIGH  1
+
+#define PI_INPUT  0
+#define PI_OUTPUT 1
+
+#define PI_PUD_OFF  0
+#define PI_PUD_DOWN 1
+#define PI_PUD_UP   2
 
 int gpioInitialise(void);
-int gpioSetMode(int pin, int mode);
-int gpioTerminate(void);
-int gpioWrite(int pin, int value);
-int gpioDelay(int us);
+int gpioSetMode(unsigned pin, unsigned mode);
+void gpioTerminate(void);
+void gpioWrite(unsigned pin, unsigned level);
+uint32_t gpioDelay(uint32_t micros);
+
+int serOpen(const char *device, int baudrate, int unused);
+
+#define PI_SER_READ_NO_DATA -1
+int serReadByte(int fd);
