@@ -1,6 +1,7 @@
 /* hardeware/gpio.h */
 
 #include <stdint.h>
+#include <termios.h>
 
 #ifdef __APPLE__
 
@@ -42,7 +43,7 @@ void gpioTerminate(void);
 void gpioWrite(unsigned pin, unsigned level);
 uint32_t gpioDelay(uint32_t micros);
 
-int serOpen(const char *device, int baudrate, int unused);
+int serOpen(const char *device, speed_t baudrate, int unused);
 
 #define PI_SER_READ_NO_DATA -1
 int serReadByte(int fd);
