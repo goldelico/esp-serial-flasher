@@ -98,7 +98,7 @@ static int serialOpen (const char *device, uint32_t baudrate)
     int status, fd;
 
     if ((fd = open (device, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK)) == -1) {
-        printf("Error occured while opening serial port !\n");
+        printf("Error occured while opening serial port %s!\n", device);
         return -1 ;
     }
 
@@ -129,7 +129,14 @@ static int serialOpen (const char *device, uint32_t baudrate)
     options.c_cc [VMIN]  = 0 ;
     options.c_cc [VTIME] = 10 ; // 1 Second
 
-    tcsetattr (fd, TCSANOW, &options) ;
+    if (tcsetattr (fd, TCSANOW, &options) < 0) { /* failed to modify */
+#ifdef __APPLE__
+#define IOSSIOSPEED _IOW('T', 2, speed_t)
+	cfsetspeed (&options, B9600);	// use standard speed through tcsetattr
+	tcsetattr (fd, TCSANOW, &options);
+	ioctl (fd, IOSSIOSPEED, &baud);	// provide extended speed setting
+#endif
+	}
 
     ioctl (fd, TIOCMGET, &status);
 
@@ -249,7 +256,7 @@ esp_loader_error_t loader_port_write(const uint8_t *data, uint16_t size, uint32_
 
 esp_loader_error_t loader_port_read(uint8_t *data, uint16_t size, uint32_t timeout)
 {
-    RETURN_ON_ERROR( read_data(data, size) );
+    RETURN_ON_ERROR( read_data((char *) data, size) );
 
 #if SERIAL_FLASHER_DEBUG_TRACE
     transfer_debug_print(data, size, false);
