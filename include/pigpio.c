@@ -12,18 +12,89 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/select.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <termios.h>
+
+int fd;
+void *map_base;
 
 int gpioInitialise(void)
 {
+#ifdef __mips__
+
+	// may better check for LX16 in /proc/device-tree/model or alike
+
+	// copy tool to LX16 through
+	//
+	//  scp build/Deployment/esp-serial-flasher.bin/bin/mipsel-linux-gnu/esp-serial-flasher root@192.168.0.202:
+
+	fd=open("/dev/mem", O_RDWR | O_SYNC);
+	if(fd < 0) {
+		perror("open /dev/mem");
+		return -1;
+	}
+	// alternatively we could mmap the whole gpio register block here
+#define MAP_SIZE 4096UL
+#define MAP_MASK (MAP_SIZE - 1)
+#define GPIO_BASE 0x10010000
+	printf("gpio base %08x\n", GPIO_BASE & ~MAP_MASK);
+	map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO_BASE & ~MAP_MASK);
+
+	printf("map_base %08x\n", map_base);
+	printf("register %08x\n", (uint8_t *) map_base + 0x100);
+	printf("value %08x\n", *(uint32_t *) ((uint8_t *) map_base + 0x100));
+
+#endif
 	printf("%s\n", __func__);
 	return 0;
 	return -1;
 }
+
+#ifdef __mips__
+
+unsigned raspi2lx16(unsigned pin)
+{
+#define TARGET_RST_Pin 2
+#define TARGET_IO0_Pin 3
+
+	switch(pin) {
+		case 2: return 32+4;	// PB4
+		case 3: return 32+5;	// PB5
+	}
+	return -1;
+}
+
+uint32_t *lx16_addr(unsigned pin, unsigned reg)
+{ // base address
+	return (uint32_t *) ((uint8_t *) map_base + 0x100 * (pin/32) + reg);	// account for banks A..D
+}
+
+uint32_t lx16_read(unsigned pin, unsigned reg)
+{ // base address
+	uint32_t value;
+	value = *lx16_addr(pin, reg);
+	printf("read %08x from %08x\n", value, lx16_addr(pin, reg));
+	return value;
+}
+
+void lx16_write(unsigned pin, unsigned reg, uint32_t value)
+{ // base address
+	printf("write %08x to %08x\n", value, lx16_addr(pin, reg));
+#if 1
+	*lx16_addr(pin, reg) = value;
+#endif
+}
+
+uint32_t lx16_mask(unsigned pin)
+{ // bit mask
+	return 1<<(pin % 32);	// bit mask
+}
+
+#endif	// __mips__
 
 int gpioSetMode(unsigned pin, unsigned mode)
 {
@@ -35,11 +106,54 @@ int gpioSetMode(unsigned pin, unsigned mode)
 void gpioTerminate(void)
 {
 	printf("%s\n", __func__);
+#ifdef __mips__
+	close(fd);
+#endif
 }
 
 void gpioWrite(unsigned pin, unsigned level)
 {
 	printf("%s(%u, %u)\n", __func__, pin, level);
+#ifdef __mips__
+#define PxPINL	0x00
+#define PxINT	0x10
+#define PxMSK	0x20	// bit = 1 => GPIO
+#define PxMSKS	0x24	// bit = 1 => GPIO
+#define PxMSKC	0x28	// bit = 1 => no GPIO
+#define PxPAT0	0x40
+#define PxPAT1	0x30
+#define PxPU0	0x80
+#define PxPUS	0x84
+#define PxPUC	0x88
+
+	/*
+	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
+	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
+	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
+	 */
+	uint32_t value;
+
+	// disable pull-ups
+	lx16_read(raspi2lx16(pin), PxPU0);	// current value
+	lx16_write(raspi2lx16(pin), PxPUC, lx16_mask(raspi2lx16(2)) | lx16_mask(raspi2lx16(3))); // disable internal pull-ups on PB4 and PB5
+	lx16_read(raspi2lx16(pin), PxPU0);	// read back
+
+	switch(pin) {
+		case 2:	// PB4: 1 = enable, 0 = power down
+			value = lx16_read(raspi2lx16(pin), PxPAT0);
+			if(level)
+				value |= lx16_mask(raspi2lx16(pin));	// set high
+			else
+				value &= ~lx16_mask(raspi2lx16(pin));	// set low
+			lx16_write(raspi2lx16(pin), PxPAT0, value);
+			lx16_read(raspi2lx16(pin), PxPAT0);	// read back
+			break;
+			;;
+		case 3:	// PB5
+			// should switch modes?
+			;;
+	}
+#endif
 }
 
 uint32_t gpioDelay(uint32_t micros)
@@ -48,7 +162,7 @@ uint32_t gpioDelay(uint32_t micros)
 	return micros;
 }
 
-int serOpen(const char *device, int baud, int unused)
+int serOpen(const char *device, speed_t baud, int unused)
 {
 	struct termios tc;
 	int fd = open(device, O_RDWR);
