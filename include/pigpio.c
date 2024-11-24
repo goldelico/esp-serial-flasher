@@ -24,6 +24,7 @@ void *map_base;
 
 int gpioInitialise(void)
 {
+	printf("%s\n", __func__);
 #ifdef __mips__
 
 	// may better check for LX16 in /proc/device-tree/model or alike
@@ -49,7 +50,6 @@ int gpioInitialise(void)
 	printf("value %08x\n", *(uint32_t *) ((uint8_t *) map_base + 0x100));
 
 #endif
-	printf("%s\n", __func__);
 	return 0;
 	return -1;
 }
@@ -96,13 +96,6 @@ uint32_t lx16_mask(unsigned pin)
 
 #endif	// __mips__
 
-int gpioSetMode(unsigned pin, unsigned mode)
-{
-	printf("%s(%u, %u)\n", __func__, pin, mode);
-	return 0;
-	return -1;
-}
-
 void gpioTerminate(void)
 {
 	printf("%s\n", __func__);
@@ -111,12 +104,14 @@ void gpioTerminate(void)
 #endif
 }
 
-void gpioWrite(unsigned pin, unsigned level)
-{
-	printf("%s(%u, %u)\n", __func__, pin, level);
+int gpioSetMode(unsigned pin, unsigned mode)
+{ // set gpio mode
+	printf("%s(%u, %u)\n", __func__, pin, mode);
 #ifdef __mips__
 #define PxPINL	0x00
 #define PxINT	0x10
+#define PxINTS	0x14
+#define PxINTC	0x18
 #define PxMSK	0x20	// bit = 1 => GPIO
 #define PxMSKS	0x24	// bit = 1 => GPIO
 #define PxMSKC	0x28	// bit = 1 => no GPIO
@@ -126,6 +121,46 @@ void gpioWrite(unsigned pin, unsigned level)
 #define PxPUS	0x84
 #define PxPUC	0x88
 
+	uint32_t value;
+	/*
+	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
+	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
+	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
+	 */
+	lx16_read(raspi2lx16(pin), PxINT);	// read back
+	lx16_write(raspi2lx16(pin), PxINTC, lx16_mask(raspi2lx16(pin)));	// disable INT on this pin
+	lx16_read(raspi2lx16(pin), PxINT);	// read back
+
+	lx16_read(raspi2lx16(pin), PxMSK);	// read back
+	lx16_write(raspi2lx16(pin), PxMSKS, lx16_mask(raspi2lx16(pin)));	// set MSK to make it a GPIO
+	lx16_read(raspi2lx16(pin), PxMSK);	// read back
+	value = lx16_read(raspi2lx16(pin), PxPAT1);
+	switch(mode)
+		{
+			case PI_OUTPUT:
+				value &= ~lx16_mask(raspi2lx16(pin));	// set to output
+				break;
+			case PI_INPUT:
+				value |= lx16_mask(raspi2lx16(pin));	// set to input
+				break;
+			default:
+				return -1;
+		}
+	lx16_write(raspi2lx16(pin), PxPAT1, value);
+	lx16_read(raspi2lx16(pin), PxPAT1);	// read back
+	// disable pull-ups PI_PUD_OFF?
+	lx16_read(raspi2lx16(pin), PxPU0);	// current value
+	lx16_write(raspi2lx16(pin), PxPUC, lx16_mask(raspi2lx16(2)) | lx16_mask(raspi2lx16(3))); // disable internal pull-ups on PB4 and PB5
+	lx16_read(raspi2lx16(pin), PxPU0);	// read back
+#endif
+	return 0;
+}
+
+void gpioWrite(unsigned pin, unsigned level)
+{
+	printf("%s(%u, %u)\n", __func__, pin, level);
+#ifdef __mips__
+
 	/*
 	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
 	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
@@ -133,25 +168,17 @@ void gpioWrite(unsigned pin, unsigned level)
 	 */
 	uint32_t value;
 
-	// disable pull-ups
-	lx16_read(raspi2lx16(pin), PxPU0);	// current value
-	lx16_write(raspi2lx16(pin), PxPUC, lx16_mask(raspi2lx16(2)) | lx16_mask(raspi2lx16(3))); // disable internal pull-ups on PB4 and PB5
-	lx16_read(raspi2lx16(pin), PxPU0);	// read back
-
 	switch(pin) {
-		case 2:	// PB4: 1 = enable, 0 = power down
+		case 2: // PB4: 1 = enable, 0 = power down
+		case 3:	// PB5: 1/input = normal boot, 0 = flashing
 			value = lx16_read(raspi2lx16(pin), PxPAT0);
 			if(level)
 				value |= lx16_mask(raspi2lx16(pin));	// set high
 			else
 				value &= ~lx16_mask(raspi2lx16(pin));	// set low
-			lx16_write(raspi2lx16(pin), PxPAT0, value);
+			lx16_write(raspi2lx16(pin), PxPAT0, value);	// set gpio value (assumin PI_OUTPUT)
 			lx16_read(raspi2lx16(pin), PxPAT0);	// read back
 			break;
-			;;
-		case 3:	// PB5
-			// should switch modes?
-			;;
 	}
 #endif
 }
