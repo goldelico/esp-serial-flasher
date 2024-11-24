@@ -26,20 +26,47 @@
 #ifdef __APPLE__
 // #define SERIAL_DEVICE     "/dev/cu.usbserial-FTH9L0T7"
 #define SERIAL_DEVICE     "/dev/cu.usbserial-FT76GT23"
+#define FIRMWARE_DIRECTORY	"/Volumes/CaseSensitive/master/Letux/lib/firmware/espressif/esp32-c6-wroom-1"
 #else
 #define SERIAL_DEVICE     "/dev/ttyS1"
+
+/*
+
+ root@letux:~# ls -l /lib/firmware/espressif/esp32-c6-wroom-1
+ total 964
+ -rw-r--r-- 1 502 root    422 Oct 29 12:49 NOTES
+ -rw-r--r-- 1 502 root  21344 Oct 29 12:49 bootloader.bin
+ -rwxr-xr-x 1 502 root   1316 Oct 29 12:49 flash-firmware.sh
+ -rw-r--r-- 1 502 root 935184 Oct 29 12:49 network_adapter.bin
+ -rw-r--r-- 1 502 root   8192 Oct 29 12:49 ota_data_initial.bin
+ -rw-r--r-- 1 502 root   3072 Oct 29 12:49 partition-table.bin
+ root@letux:~#
+
+ To flash, run this command:
+ python esptool.py -p $PORT -b 460800 --before default_reset --after hard_reset --chip esp32c6 write_flash --flash_mode dio --flash_size 4MB --flash_freq 80m 0x0 bootloader.bin 0x8000 partition-table.bin 0xd000 ota_data_initial.bin 0x1000 0 network_adapter.bin
+
+ gleiche Syntax erlauben oder das fest einbauen?
+
+ */
+
+#define FIRMWARE_DIRECTORY	"/lib/firmware/espressif/esp32-c6-wroom-1"
 #endif
 
 void usage(char *arg0)
 {
-	fprintf(stderr, "usage: %s [-b###] [-d/dev/tty]\n", arg0);
-	fprintf(stderr, "  -b### set baud rate\n");
-	fprintf(stderr, "  -d### set serial device\n");
+	fprintf(stderr, "usage: %s [-bbaud] [-d/dev/tty] [-ffirmware] [-p0-2]\n", arg0);
+	fprintf(stderr, "  -b### set baud rate [%u]\n", DEFAULT_BAUD_RATE);
+	fprintf(stderr, "  -d### set serial device [%s]\n", SERIAL_DEVICE);
+	fprintf(stderr, "  -f### set firmware directory [%s]\n", FIRMWARE_DIRECTORY);
+	fprintf(stderr, "  -p### set power [0=off 1=on 2=boot]\n");
 	exit(1);
 }
 
 int main(int argc, char *argv[])
 {
+	char *pmode=NULL;
+	char *fdirectory=FIRMWARE_DIRECTORY;
+
     example_binaries_t bin;
 
     loader_raspberry_config_t config = {
@@ -55,6 +82,8 @@ int main(int argc, char *argv[])
 			{
 				case 'b': config.baudrate=atoi(argv[1]+2); argv++; break;
 				case 'd': config.device=argv[1]+2; argv++; break;
+				case 'f': fdirectory=argv[1]+2; argv++; break;
+				case 'p': pmode=argv[1]+2; argv++; break;
 				default: usage(arg0);
 			}
 	}
@@ -62,7 +91,24 @@ int main(int argc, char *argv[])
 	if(argv[1])
 		usage(arg0);
 
-    loader_port_raspberry_init(&config);
+	if (gpioInitialise() < 0) {
+		fprintf(stderr, "gpio initialization failed\n");
+		return 1;
+	}
+
+   loader_port_raspberry_init(&config);
+
+	if(pmode)
+		{
+		printf("Switch power mode to %s\n", pmode);
+		switch(pmode[0])
+			{
+				case '0': gpioWrite(config.reset_trigger_pin, 0); gpioWrite(config.gpio0_trigger_pin, 1); exit(0);
+				case '1': loader_port_reset_target(); exit(0);
+				case '2': loader_port_enter_bootloader(); exit(0);
+				default: usage(arg0);
+			}
+		}
 
 	printf("Connecting through %s at %u and %u\n", config.device, config.baudrate, HIGHER_BAUD_RATE);
 
@@ -79,12 +125,6 @@ int main(int argc, char *argv[])
         printf("Done!\n");
         esp_loader_reset_target();
         loader_port_deinit();
-
-
-        if (gpioInitialise() < 0) {
-            fprintf(stderr, "pigpio initialization failed\n");
-            return 1;
-        }
 
         int serial = serOpen(config.device, config.baudrate, 0);
         if (serial < 0) {
