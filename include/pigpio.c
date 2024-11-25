@@ -58,12 +58,17 @@ int gpioInitialise(void)
 
 unsigned raspi2lx16(unsigned pin)
 {
+#define PA 0
+#define PB 1
+#define PC 2
+#define PD 3
+#define PZ 7
 #define TARGET_RST_Pin 2
 #define TARGET_IO0_Pin 3
 
 	switch(pin) {
-		case 2: return 32+4;	// PB4
-		case 3: return 32+5;	// PB5
+		case 2: return PB*32+4;	// PB4
+		case 3: return PB*32+5;	// PB5
 	}
 	return -1;
 }
@@ -77,13 +82,13 @@ uint32_t lx16_read(unsigned pin, unsigned reg)
 { // base address
 	uint32_t value;
 	value = *lx16_addr(pin, reg);
-	printf("read %08x from %08x\n", value, lx16_addr(pin, reg));
+	printf("read %08x from %08x (%08x)\n", value, GPIO_BASE + 0x100 * (pin/32) + reg, lx16_addr(pin, reg));
 	return value;
 }
 
 void lx16_write(unsigned pin, unsigned reg, uint32_t value)
 { // base address
-	printf("write %08x to %08x\n", value, lx16_addr(pin, reg));
+	printf("write %08x to %08x (%08x)\n", value, GPIO_BASE + 0x100 * (pin/32) + reg, lx16_addr(pin, reg));
 #if 1
 	*lx16_addr(pin, reg) = value;
 #endif
@@ -116,38 +121,51 @@ int gpioSetMode(unsigned pin, unsigned mode)
 #define PxMSKS	0x24	// bit = 1 => GPIO
 #define PxMSKC	0x28	// bit = 1 => no GPIO
 #define PxPAT0	0x40
+#define PxPAT0S	0x44
+#define PxPAT0C	0x48
 #define PxPAT1	0x30
+#define PxPAT1S	0x34
+#define PxPAT1C	0x38
 #define PxPU0	0x80
 #define PxPUS	0x84
 #define PxPUC	0x88
+#define PzGID2LD	0xf0
 
-	uint32_t value;
 	/*
 	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
 	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
 	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
 	 */
-	lx16_read(raspi2lx16(pin), PxINT);	// read back
-	lx16_write(raspi2lx16(pin), PxINTC, lx16_mask(raspi2lx16(pin)));	// disable INT on this pin
-	lx16_read(raspi2lx16(pin), PxINT);	// read back
+	lx16_read(raspi2lx16(pin), PxINT);	// read
+	lx16_read(raspi2lx16(pin), PxMSK);	// read
+	lx16_read(raspi2lx16(pin), PxPAT1);	// read
+	lx16_read(raspi2lx16(pin), PxPAT0);	// read
 
-	lx16_read(raspi2lx16(pin), PxMSK);	// read back
-	lx16_write(raspi2lx16(pin), PxMSKS, lx16_mask(raspi2lx16(pin)));	// set MSK to make it a GPIO
-	lx16_read(raspi2lx16(pin), PxMSK);	// read back
-	value = lx16_read(raspi2lx16(pin), PxPAT1);
+	lx16_write(PZ*32, PxINTC, lx16_mask(raspi2lx16(pin)));	// disable INT on this pin
+	lx16_write(PZ*32, PxMSKS, lx16_mask(raspi2lx16(pin)));	// set MSK to make it a GPIO
+
 	switch(mode)
 		{
 			case PI_OUTPUT:
-				value &= ~lx16_mask(raspi2lx16(pin));	// set to output
+				lx16_write(PZ*32, PxPAT1C, lx16_mask(raspi2lx16(pin)));	// set MSK to make it an output GPIO
 				break;
 			case PI_INPUT:
-				value |= lx16_mask(raspi2lx16(pin));	// set to input
+				lx16_write(PZ*32, PxPAT1S, lx16_mask(raspi2lx16(pin)));	// set MSK to make it an input GPIO
 				break;
 			default:
 				return -1;
 		}
-	lx16_write(raspi2lx16(pin), PxPAT1, value);
+
+	lx16_write(PZ*32, PxPAT0C, lx16_mask(raspi2lx16(TARGET_RST_Pin)));	// TARGET_RST_Pin = 0 as default (active high)
+	lx16_write(PZ*32, PxPAT0S, lx16_mask(raspi2lx16(TARGET_IO0_Pin)));	// TARGET_IO0_Pin = 1 as default (active low)
+
+	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
+
+	lx16_read(raspi2lx16(pin), PxINT);	// read back
+	lx16_read(raspi2lx16(pin), PxMSK);	// read back
 	lx16_read(raspi2lx16(pin), PxPAT1);	// read back
+	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
+
 	// disable pull-ups PI_PUD_OFF?
 	lx16_read(raspi2lx16(pin), PxPU0);	// current value
 	lx16_write(raspi2lx16(pin), PxPUC, lx16_mask(raspi2lx16(2)) | lx16_mask(raspi2lx16(3))); // disable internal pull-ups on PB4 and PB5
@@ -166,20 +184,13 @@ void gpioWrite(unsigned pin, unsigned level)
 	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
 	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
 	 */
-	uint32_t value;
 
-	switch(pin) {
-		case 2: // PB4: 1 = enable, 0 = power down
-		case 3:	// PB5: 1/input = normal boot, 0 = flashing
-			value = lx16_read(raspi2lx16(pin), PxPAT0);
-			if(level)
-				value |= lx16_mask(raspi2lx16(pin));	// set high
-			else
-				value &= ~lx16_mask(raspi2lx16(pin));	// set low
-			lx16_write(raspi2lx16(pin), PxPAT0, value);	// set gpio value (assumin PI_OUTPUT)
-			lx16_read(raspi2lx16(pin), PxPAT0);	// read back
-			break;
-	}
+	lx16_read(raspi2lx16(pin), PxPAT0);	// read
+
+	lx16_write(PZ*32, level ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to make it an GPIO = 1
+	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
+
+	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
 #endif
 }
 
