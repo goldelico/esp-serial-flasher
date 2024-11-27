@@ -54,13 +54,16 @@
 
 void usage(char *arg0)
 {
-	fprintf(stderr, "usage: %s [-bbaud] [-d/dev/tty] [-ffirmware] [-p0-2]\n", arg0);
+	fprintf(stderr, "usage: %s [-bbaud] [-d/dev/tty] [-ffirmware] [-h] [-p0-2]\n", arg0);
 	fprintf(stderr, "  -b### set baud rate [%u]\n", DEFAULT_BAUD_RATE);
 	fprintf(stderr, "  -d### set serial device [%s]\n", SERIAL_DEVICE);
+	fprintf(stderr, "  -h flash Hello World example\n");
 	fprintf(stderr, "  -f### set firmware directory [%s]\n", FIRMWARE_DIRECTORY);
 	fprintf(stderr, "  -p### set power [0=off 1=on 2=boot]\n");
 	exit(1);
 }
+
+int helloworld=0;
 
 int main(int argc, char *argv[])
 {
@@ -83,6 +86,7 @@ int main(int argc, char *argv[])
 				case 'b': config.baudrate=atoi(argv[1]+2); argv++; break;
 				case 'd': config.device=argv[1]+2; argv++; break;
 				case 'f': fdirectory=argv[1]+2; argv++; break;
+				case 'h': helloworld=1; argv++; break;
 				case 'p': pmode=argv[1]+2; argv++; break;
 				default: usage(arg0);
 			}
@@ -114,15 +118,65 @@ int main(int argc, char *argv[])
 
     if (connect_to_target(HIGHER_BAUD_RATE) == ESP_LOADER_SUCCESS) {
 
-		get_example_binaries(esp_loader_get_target(), &bin);
+		if(helloworld)
+			{ // Flash Hello World Example
+				get_example_binaries(esp_loader_get_target(), &bin);
 
-        printf("Loading bootloader...\n");
-        flash_binary(bin.boot.data, bin.boot.size, bin.boot.addr);
-        printf("Loading partition table...\n");
-        flash_binary(bin.part.data, bin.part.size, bin.part.addr);
-        printf("Loading app...\n");
-        flash_binary(bin.app.data,  bin.app.size,  bin.app.addr);
-        printf("Done!\n");
+				printf("Loading bootloader...\n");
+				flash_binary(bin.boot.data, bin.boot.size, bin.boot.addr);
+				printf("Loading partition table...\n");
+				flash_binary(bin.part.data, bin.part.size, bin.part.addr);
+				printf("Loading app...\n");
+				flash_binary(bin.app.data,  bin.app.size,  bin.app.addr);
+			}
+		else if(esp_loader_get_target() == ESP32C6_CHIP)
+			{
+			struct partition {
+				char *file;
+				unsigned int addr;
+			} partitions[] = {
+				{ "bootloader", 0x0 },
+				{ "partition-table", 0x8000 },
+				{ "ota_data_initial", 0xd000 },
+				{ "network_adapter", 0x10000 },
+			};
+			int i;
+			const uint8_t *data = NULL;	// buffer shared for all partitions and resized on demand
+			size_t size, bufsize=0;
+			for(i=0; i<sizeof(partitions)/sizeof(partitions[0]); i++)
+				{
+				FILE *f;
+				char path[PATH_MAX];
+				printf("Loading %s...\n", partitions[i].file);
+				sprintf(path, "%s/%s.bin", fdirectory, partitions[i].file);
+				f=fopen(path, "r");
+				if(f == NULL)
+					{
+					fprintf(stderr, "can't open %s\n", path);
+					return 1;
+					}
+				fseek(f, 0L, SEEK_END);
+				size=ftell(f);
+				if(size > bufsize)
+					data=realloc((void *) data, bufsize=size);
+				rewind(f);
+				if(fread((void *) data, sizeof(*data), size, f) != size)
+					{
+					fprintf(stderr, "read error\n");
+					return 1;
+					}
+				fclose(f);
+				flash_binary(data, size, partitions[i].addr);
+				}
+			free((void *) data);
+			}
+		else
+			{
+			fprintf(stderr, "can not flash this device\n");
+			return 1;
+			}
+
+		printf("Done!\n");
         esp_loader_reset_target();
         loader_port_deinit();
 
@@ -136,7 +190,7 @@ int main(int argc, char *argv[])
         printf("********************************************\n");
 
         // Delay for skipping the boot message of the targets
-        gpioDelay(500000);
+        // gpioDelay(500000);
         while (1) {
             int byte = serReadByte(serial);
             if (byte != PI_SER_READ_NO_DATA) {
