@@ -175,10 +175,9 @@ static void set_timeout(uint32_t timeout)
     struct termios options;
 
     timeout /= 100;
-    timeout = MAX(timeout, 1);
-
+    timeout = MIN(MAX(timeout, 1), 255);
     tcgetattr(serial, &options);
-    options.c_cc[VTIME] = timeout;
+    options.c_cc[VTIME] = timeout;	// Timeout in deciseconds for noncanonical read
     tcsetattr(serial, TCSANOW, &options);
 }
 
