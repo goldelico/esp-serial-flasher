@@ -176,6 +176,7 @@ static void set_timeout(uint32_t timeout)
 
     timeout /= 100;
     timeout = MIN(MAX(timeout, 1), 255);
+// printf("set_timeout => %u\n", timeout);
     tcgetattr(serial, &options);
     options.c_cc[VTIME] = timeout;	// Timeout in deciseconds for noncanonical read
     tcsetattr(serial, TCSANOW, &options);
@@ -183,10 +184,14 @@ static void set_timeout(uint32_t timeout)
 
 static esp_loader_error_t read_char(char *c, uint32_t timeout)
 {
+// printf("read_char timeout=%u\n", timeout);
     set_timeout(timeout);
     int read_bytes = read(serial, c, 1);
 
+// printf("read_char read_bytes=%d\n", read_bytes);
+
     if (read_bytes == 1) {
+// printf("read_char c=%c\n", *c);
         return ESP_LOADER_SUCCESS;
     } else if (read_bytes == 0) {
         return ESP_LOADER_ERROR_TIMEOUT;
@@ -255,11 +260,13 @@ esp_loader_error_t loader_port_write(const uint8_t *data, uint16_t size, uint32_
 
 esp_loader_error_t loader_port_read(uint8_t *data, uint16_t size, uint32_t timeout)
 {
+// printf("loader_port_read %hu %u\n", size, timeout);
     RETURN_ON_ERROR( read_data((char *) data, size) );
 
 #if SERIAL_FLASHER_DEBUG_TRACE
     transfer_debug_print(data, size, false);
 #endif
+// printf("loader_port_read done\n");
 
     return ESP_LOADER_SUCCESS;
 }
@@ -291,6 +298,7 @@ void loader_port_delay_ms(uint32_t ms)
 
 void loader_port_start_timer(uint32_t ms)
 {
+// printf("loader_port_start_timer: clock = %lu CLOCKS_PER_SEC = %u\n", clock(), CLOCKS_PER_SEC);
     s_time_end = clock() + (ms * (CLOCKS_PER_SEC / 1000));
 }
 

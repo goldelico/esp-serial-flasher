@@ -21,6 +21,7 @@
 #include "md5_hash.h"
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 #define SHORT_TIMEOUT 100
 #define DEFAULT_TIMEOUT 1000
@@ -372,6 +373,7 @@ esp_loader_error_t esp_loader_flash_write(void *payload, uint32_t size)
         loader_port_start_timer(DEFAULT_TIMEOUT);
         result = loader_flash_data_cmd(data, s_flash_write_size);
         attempt++;
+// printf("attempt %d result %d\n", attempt, result);
     } while (result != ESP_LOADER_SUCCESS && attempt < SERIAL_FLASHER_WRITE_BLOCK_RETRIES);
 
     return result;
