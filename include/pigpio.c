@@ -24,7 +24,9 @@ void *map_base;
 
 int gpioInitialise(void)
 {
+#if 0
 	printf("%s\n", __func__);
+#endif
 #ifdef __mips__
 
 	// may better check for LX16 in /proc/device-tree/model or alike
@@ -42,12 +44,16 @@ int gpioInitialise(void)
 #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
 #define GPIO_BASE 0x10010000
+#if 0
 	printf("gpio base %08x\n", GPIO_BASE & ~MAP_MASK);
+#endif
 	map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO_BASE & ~MAP_MASK);
 
+#if 0
 	printf("map_base %08x\n", map_base);
 	printf("register %08x\n", (uint8_t *) map_base + 0x100);
 	printf("value %08x\n", *(uint32_t *) ((uint8_t *) map_base + 0x100));
+#endif
 
 #endif
 	return 0;
@@ -82,13 +88,17 @@ uint32_t lx16_read(unsigned pin, unsigned reg)
 { // base address
 	uint32_t value;
 	value = *lx16_addr(pin, reg);
+#if 0
 	printf("read %08x from %08x (%08x)\n", value, GPIO_BASE + 0x100 * (pin/32) + reg, lx16_addr(pin, reg));
+#endif
 	return value;
 }
 
 void lx16_write(unsigned pin, unsigned reg, uint32_t value)
 { // base address
+#if 0
 	printf("write %08x to %08x (%08x)\n", value, GPIO_BASE + 0x100 * (pin/32) + reg, lx16_addr(pin, reg));
+#endif
 #if 1
 	*lx16_addr(pin, reg) = value;
 #endif
@@ -103,7 +113,9 @@ uint32_t lx16_mask(unsigned pin)
 
 void gpioTerminate(void)
 {
+#if 0
 	printf("%s\n", __func__);
+#endif
 #ifdef __mips__
 	close(fd);
 #endif
@@ -111,7 +123,9 @@ void gpioTerminate(void)
 
 int gpioSetMode(unsigned pin, unsigned mode)
 { // set gpio mode
+#if 0
 	printf("%s(%u, %u)\n", __func__, pin, mode);
+#endif
 #ifdef __mips__
 #define PxPINL	0x00
 #define PxINT	0x10
@@ -176,7 +190,9 @@ int gpioSetMode(unsigned pin, unsigned mode)
 
 void gpioWrite(unsigned pin, unsigned level)
 {
+#if 0
 	printf("%s(%u, %u)\n", __func__, pin, level);
+#endif
 #ifdef __mips__
 
 	/*
