@@ -1,4 +1,5 @@
 build*/
+examples/binaries/
 sdkconfig
 sdkconfig.old
 empty_file.bin
