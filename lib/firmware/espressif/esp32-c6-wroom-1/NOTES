@@ -1,0 +1,6 @@
+This firmware was built Fr 29 Nov 2024 14:54:37 CET
+from 927a34f @ https://github.com/espressif/esp-hosted.git
+for target esp32c6
+
+To flash, run this command:
+   python esptool.py -p $PORT -b 460800 --before default_reset --after hard_reset --chip esp32c6 write_flash --flash_mode dio --flash_size 4MB --flash_freq 80m 0x0 bootloader.bin 0x8000 partition-table.bin 0xd000 ota_data_initial.bin 0x10000 network_adapter.bin
