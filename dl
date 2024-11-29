@@ -1,0 +1,14 @@
+#!/bin/bash
+# ./dl to LX16
+
+# das installiert nach /root und nicht nach /usr/local/bin/$ARCH wie das Debian-Paket!
+
+scp build/Deployment/letux-esp-serial-flasher.bin/bin/mipsel-linux-gnu/letux-esp-serial-flasher root@192.168.0.202:
+
+case "$1" in
+	-fw )
+		# rsync um Subdirectory zu kopieren?
+		ssh root@192.168.0.202 mkdir -p /lib/firmware/espressif/esp32-c6-wroom-1/
+		scp ./lib/firmware/espressif/esp32-c6-wroom-1/*.bin root@192.168.0.202:/lib/firmware/espressif/esp32-c6-wroom-1/
+		;;
+esac
