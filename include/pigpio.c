@@ -96,7 +96,7 @@ uint32_t lx16_read(unsigned pin, unsigned reg)
 
 void lx16_write(unsigned pin, unsigned reg, uint32_t value)
 { // base address
-#if 0
+#if 1
 	printf("write %08x to %08x (%08x)\n", value, GPIO_BASE + 0x100 * (pin/32) + reg, lx16_addr(pin, reg));
 #endif
 #if 1
@@ -123,7 +123,7 @@ void gpioTerminate(void)
 
 int gpioSetMode(unsigned pin, unsigned mode)
 { // set gpio mode
-#if 0
+#if 1
 	printf("%s(%u, %u)\n", __func__, pin, mode);
 #endif
 #ifdef __mips__
@@ -161,8 +161,14 @@ int gpioSetMode(unsigned pin, unsigned mode)
 	switch(mode)
 		{
 			case PI_OUTPUT:
+				{
+				unsigned int lvl = lx16_read(raspi2lx16(TARGET_IO0_Pin), PxPINL);	// read
+				printf("%s: pin level %08x\n", __func__, lvl);
+				printf("%s: pin level %d\n", __func__, !!(lvl & lx16_mask(raspi2lx16(TARGET_IO0_Pin))));
 				lx16_write(PZ*32, PxPAT1C, lx16_mask(raspi2lx16(pin)));	// set MSK to make it an output GPIO
+				lx16_write(PZ*32, lvl ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to mirror previous level
 				break;
+				}
 			case PI_INPUT:
 				lx16_write(PZ*32, PxPAT1S, lx16_mask(raspi2lx16(pin)));	// set MSK to make it an input GPIO
 				break;
@@ -188,12 +194,74 @@ int gpioSetMode(unsigned pin, unsigned mode)
 	return 0;
 }
 
+int gpioRead(unsigned pin)
+{
+#ifdef __mips__
+	unsigned int lvl = lx16_read(raspi2lx16(pin), PxPINL);	// read
+	printf("%s: pin level %08x\n", __func__, lvl);
+	lvl &= lx16_mask(raspi2lx16(pin));
+	printf("%s: pin level %d = %d\n", __func__, pin, !!lvl);
+	return !!lvl;
+#else
+	return 0;
+#endif
+}
+
 void gpioWrite(unsigned pin, unsigned level)
 {
-#if 0
+#if 1
 	printf("%s(%u, %u)\n", __func__, pin, level);
 #endif
 #ifdef __mips__
+
+#if 1
+	/*
+	 * Controlling power of the ESP32 on a running Linux system is quite tricky
+	 * if we directly control the EN GPIO, the mmc core will detect that the
+	 * module is not responding and actively enables it through a vmmc-supply
+	 * or mmc-pwrseq-simple which usually controls the EN GPIO.
+	 * So we can turn off the ESP32 only for a moment by directly accessing
+	 * the GPIO registers.
+	 * Therefore,we unbind/bind the esp32_sdio driver, which indirectly controls
+	 * the EN GPIO.
+	 * Next issue is to bring the ESP32 into flashing mode. While that GPIO
+	 * is not controlled by Linux at all, we can directly activate/deactivate
+	 * it through the /dev/mem + mmap() interface.
+	 * So we could switch it to low level and activate the EN GPIO by binding the
+	 * esp32_sdio driver.
+	 * But as soon as the ESP32 enters ROM download mode the mmc core again detects
+	 * that the ESP32 is not responding and does a reset.
+	 * Since here in this library we just know about these two GPIOs but not what
+	 * the caller intends to do we need another hack:
+	 * - use unbind/bind method for the EN GPIO if the flashing GPIO is high
+	 * - use /dev/mem + mmap() for the EN GPIO of the flashing GPIO is low and
+	 +   the EN GPIO should go high (in that case the driver should be unbound before)
+	 */
+
+	gpioRead(TARGET_RST_Pin);	// current power level
+
+	// nur wenn TARGET_IO0_Pin == 1 ist (also nicht fürs Flashing)
+	if(pin == TARGET_RST_Pin && !(level && !gpioRead(TARGET_IO0_Pin)))
+		{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are turning on flashing mode
+		FILE *f;
+#if 1
+		if(level)
+			f=fopen("/sys/bus/platform/drivers/jz4740-mmc/bind", "w");
+		else
+			f=fopen("/sys/bus/platform/drivers/jz4740-mmc/unbind", "w");
+		fprintf(f, "%s\n", "13460000.mmc");	// mmc1 controls the GPIO
+#else	// is not as reliable
+		if(level)
+			f=fopen("/sys/bus/sdio/drivers/esp32_sdio/bind", "w");
+		else
+			f=fopen("/sys/bus/sdio/drivers/esp32_sdio/unbind", "w");
+		fprintf(f, "%s\n", "mmc1:0001:1");	// mmc1 controls the GPIO
+#endif
+		fclose(f);
+			gpioRead(TARGET_RST_Pin);	// current power level
+		return;
+		}
+#endif
 
 	/*
 	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
