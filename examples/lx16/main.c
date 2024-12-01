@@ -107,9 +107,16 @@ int main(int argc, char *argv[])
 		printf("Switch power mode to %s\n", pmode);
 		switch(pmode[0])
 			{
-				case '0': gpioWrite(config.reset_trigger_pin, 0); gpioWrite(config.gpio0_trigger_pin, 1); exit(0);
-				case '1': loader_port_reset_target(); exit(0);
-				case '2': loader_port_enter_bootloader(); exit(0);
+				case '0':
+					gpioWrite(config.reset_trigger_pin, 0);
+					gpioWrite(config.gpio0_trigger_pin, 1);
+					exit(0);
+				case '1':
+					loader_port_reset_target();
+					exit(0);
+				case '2':
+					loader_port_enter_bootloader();
+					exit(0);
 				default: usage(arg0);
 			}
 		}
