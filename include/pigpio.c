@@ -27,7 +27,26 @@ int gpioInitialise(void)
 #if 0
 	printf("%s\n", __func__);
 #endif
+
 #ifdef __mips__
+
+#define PxPINL	0x00
+#define PxINT	0x10
+#define PxINTS	0x14
+#define PxINTC	0x18
+#define PxMSK	0x20	// bit = 1 => GPIO
+#define PxMSKS	0x24	// bit = 1 => GPIO
+#define PxMSKC	0x28	// bit = 1 => no GPIO
+#define PxPAT0	0x40
+#define PxPAT0S	0x44
+#define PxPAT0C	0x48
+#define PxPAT1	0x30
+#define PxPAT1S	0x34
+#define PxPAT1C	0x38
+#define PxPU0	0x80
+#define PxPUS	0x84
+#define PxPUC	0x88
+#define PzGID2LD	0xf0
 
 	// may better check for LX16 in /proc/device-tree/model or alike
 
@@ -96,7 +115,7 @@ uint32_t lx16_read(unsigned pin, unsigned reg)
 
 void lx16_write(unsigned pin, unsigned reg, uint32_t value)
 { // base address
-#if 1
+#if 0
 	printf("write %08x to %08x (%08x)\n", value, GPIO_BASE + 0x100 * (pin/32) + reg, lx16_addr(pin, reg));
 #endif
 #if 1
@@ -121,39 +140,35 @@ void gpioTerminate(void)
 #endif
 }
 
+int gpioRead(unsigned pin)
+{
+#ifdef __mips__
+	unsigned int lvl = lx16_read(raspi2lx16(pin), PxPINL);	// read
+//	printf("%s: pin %d level raw %08x\n", __func__, lvl);
+	lvl &= lx16_mask(raspi2lx16(pin));
+//	printf("%s: pin %d level %d\n", __func__, pin, !!lvl);
+	return !!lvl;
+#else
+	return 0;
+#endif
+}
+
 int gpioSetMode(unsigned pin, unsigned mode)
 { // set gpio mode
-#if 1
+#if 0
 	printf("%s(%u, %u)\n", __func__, pin, mode);
 #endif
 #ifdef __mips__
-#define PxPINL	0x00
-#define PxINT	0x10
-#define PxINTS	0x14
-#define PxINTC	0x18
-#define PxMSK	0x20	// bit = 1 => GPIO
-#define PxMSKS	0x24	// bit = 1 => GPIO
-#define PxMSKC	0x28	// bit = 1 => no GPIO
-#define PxPAT0	0x40
-#define PxPAT0S	0x44
-#define PxPAT0C	0x48
-#define PxPAT1	0x30
-#define PxPAT1S	0x34
-#define PxPAT1C	0x38
-#define PxPU0	0x80
-#define PxPUS	0x84
-#define PxPUC	0x88
-#define PzGID2LD	0xf0
 
 	/*
 	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
 	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
 	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
 	 */
-	lx16_read(raspi2lx16(pin), PxINT);	// read
-	lx16_read(raspi2lx16(pin), PxMSK);	// read
-	lx16_read(raspi2lx16(pin), PxPAT1);	// read
-	lx16_read(raspi2lx16(pin), PxPAT0);	// read
+//	lx16_read(raspi2lx16(pin), PxINT);	// read
+//	lx16_read(raspi2lx16(pin), PxMSK);	// read
+//	lx16_read(raspi2lx16(pin), PxPAT1);	// read
+//	lx16_read(raspi2lx16(pin), PxPAT0);	// read
 
 	lx16_write(PZ*32, PxINTC, lx16_mask(raspi2lx16(pin)));	// disable INT on this pin
 	lx16_write(PZ*32, PxMSKS, lx16_mask(raspi2lx16(pin)));	// set MSK to make it a GPIO
@@ -162,9 +177,7 @@ int gpioSetMode(unsigned pin, unsigned mode)
 		{
 			case PI_OUTPUT:
 				{
-				unsigned int lvl = lx16_read(raspi2lx16(TARGET_IO0_Pin), PxPINL);	// read
-				printf("%s: pin level %08x\n", __func__, lvl);
-				printf("%s: pin level %d\n", __func__, !!(lvl & lx16_mask(raspi2lx16(TARGET_IO0_Pin))));
+				int lvl=gpioRead(pin);
 				lx16_write(PZ*32, PxPAT1C, lx16_mask(raspi2lx16(pin)));	// set MSK to make it an output GPIO
 				lx16_write(PZ*32, lvl ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to mirror previous level
 				break;
@@ -181,35 +194,22 @@ int gpioSetMode(unsigned pin, unsigned mode)
 
 	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
 
-	lx16_read(raspi2lx16(pin), PxINT);	// read back
-	lx16_read(raspi2lx16(pin), PxMSK);	// read back
-	lx16_read(raspi2lx16(pin), PxPAT1);	// read back
-	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
+//	lx16_read(raspi2lx16(pin), PxINT);	// read back
+//	lx16_read(raspi2lx16(pin), PxMSK);	// read back
+//	lx16_read(raspi2lx16(pin), PxPAT1);	// read back
+//	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
 
 	// disable pull-ups PI_PUD_OFF?
-	lx16_read(raspi2lx16(pin), PxPU0);	// current value
+//	lx16_read(raspi2lx16(pin), PxPU0);	// current value
 	lx16_write(raspi2lx16(pin), PxPUC, lx16_mask(raspi2lx16(2)) | lx16_mask(raspi2lx16(3))); // disable internal pull-ups on PB4 and PB5
-	lx16_read(raspi2lx16(pin), PxPU0);	// read back
+//	lx16_read(raspi2lx16(pin), PxPU0);	// read back
 #endif
 	return 0;
-}
-
-int gpioRead(unsigned pin)
-{
-#ifdef __mips__
-	unsigned int lvl = lx16_read(raspi2lx16(pin), PxPINL);	// read
-	printf("%s: pin level %08x\n", __func__, lvl);
-	lvl &= lx16_mask(raspi2lx16(pin));
-	printf("%s: pin level %d = %d\n", __func__, pin, !!lvl);
-	return !!lvl;
-#else
-	return 0;
-#endif
 }
 
 void gpioWrite(unsigned pin, unsigned level)
 {
-#if 1
+#if 0
 	printf("%s(%u, %u)\n", __func__, pin, level);
 #endif
 #ifdef __mips__
@@ -234,16 +234,17 @@ void gpioWrite(unsigned pin, unsigned level)
 	 * Since here in this library we just know about these two GPIOs but not what
 	 * the caller intends to do we need another hack:
 	 * - use unbind/bind method for the EN GPIO if the flashing GPIO is high
-	 * - use /dev/mem + mmap() for the EN GPIO of the flashing GPIO is low and
-	 +   the EN GPIO should go high (in that case the driver should be unbound before)
+	 * - use /dev/mem + mmap() for the EN GPIO of the flashing GPIO is low
+	 * - there is a special case when we do both
 	 */
 
-	gpioRead(TARGET_RST_Pin);	// current power level
+// 	printf("before: "); gpioRead(pin);	// current pin level
 
 	// nur wenn TARGET_IO0_Pin == 1 ist (also nicht fürs Flashing)
-	if(pin == TARGET_RST_Pin && !(level && !gpioRead(TARGET_IO0_Pin)))
-		{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are turning on flashing mode
+	if(pin == TARGET_RST_Pin && (!level || gpioRead(TARGET_IO0_Pin)))
+		{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are controlling flashing mode
 		FILE *f;
+//		printf("%s\n", level? "bind" : "unbind");
 #if 1
 		if(level)
 			f=fopen("/sys/bus/platform/drivers/jz4740-mmc/bind", "w");
@@ -258,8 +259,9 @@ void gpioWrite(unsigned pin, unsigned level)
 		fprintf(f, "%s\n", "mmc1:0001:1");	// mmc1 controls the GPIO
 #endif
 		fclose(f);
-			gpioRead(TARGET_RST_Pin);	// current power level
-		return;
+//			printf("after: "); gpioRead(pin);	// current power level
+		if (level)
+			return;	// no need for manual control
 		}
 #endif
 
@@ -269,12 +271,12 @@ void gpioWrite(unsigned pin, unsigned level)
 	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
 	 */
 
-	lx16_read(raspi2lx16(pin), PxPAT0);	// read
+//	lx16_read(raspi2lx16(pin), PxPAT0);	// read
 
 	lx16_write(PZ*32, level ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to make it an GPIO = 1
 	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
 
-	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
+//	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
 #endif
 }
 
