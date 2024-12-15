@@ -50,6 +50,9 @@ static void transfer_debug_print(const uint8_t *data, uint16_t size, bool write)
 #endif
 
 static int serial;
+#ifdef __APPLE__
+static int once=0;
+#endif
 static int64_t s_time_end;
 static int32_t s_reset_trigger_pin;
 static int32_t s_gpio0_trigger_pin;
@@ -135,6 +138,7 @@ static int serialOpen (const char *device, uint32_t baudrate)
 	cfsetspeed (&options, B9600);	// use standard speed through tcsetattr
 	tcsetattr (fd, TCSANOW, &options);
 	ioctl (fd, IOSSIOSPEED, &baud);	// provide extended speed setting
+	once = 0;
 #endif
 	}
 
@@ -173,6 +177,18 @@ static esp_loader_error_t change_baudrate(int file_desc, int baudrate)
 static void set_timeout(uint32_t timeout)
 {
     struct termios options;
+
+#ifdef __APPLE__
+	if(!once)
+		{ // on macOS with USB FTDI adapter, setting this for each read() stalls operation after a while
+// printf("set_timeout => %u\n", timeout);
+		tcgetattr(serial, &options);
+		options.c_cc[VTIME] = 10;	// Timeout in deciseconds for noncanonical read
+		tcsetattr(serial, TCSANOW, &options);
+		once = 1;
+		}
+	return;
+#endif
 
     timeout /= 100;
     timeout = MIN(MAX(timeout, 1), 255);
