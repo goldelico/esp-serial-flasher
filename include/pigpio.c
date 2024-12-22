@@ -92,8 +92,11 @@ unsigned raspi2lx16(unsigned pin)
 #define TARGET_IO0_Pin 3
 
 	switch(pin) {
-		case 2: return PB*32+4;	// PB4
-		case 3: return PB*32+5;	// PB5
+			// FIXME: read this from /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,power-gpio
+			// and /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,boot-gpio
+
+		case TARGET_RST_Pin: return PB*32+4;	// PB4 espressif,power-gpio
+		case TARGET_IO0_Pin: return PB*32+5;	// PB5 espressif,boot-gpio
 	}
 	return -1;
 }
