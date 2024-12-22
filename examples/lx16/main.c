@@ -52,11 +52,18 @@
 #define FIRMWARE_DIRECTORY	"/lib/firmware/espressif/esp32-c6-wroom-1"
 #endif
 
+static loader_raspberry_config_t config = {
+	.device = SERIAL_DEVICE,
+	.baudrate = DEFAULT_BAUD_RATE,
+	.reset_trigger_pin = TARGET_RST_Pin,
+	.gpio0_trigger_pin = TARGET_IO0_Pin,
+};
+
 void usage(char *arg0)
 {
 	fprintf(stderr, "usage: %s [-bbaud] [-d/dev/tty] [-ffirmware] [-h] [-p0-2]\n", arg0);
-	fprintf(stderr, "  -b### set baud rate [%u]\n", DEFAULT_BAUD_RATE);
-	fprintf(stderr, "  -d### set serial device [%s]\n", SERIAL_DEVICE);
+	fprintf(stderr, "  -b### set baud rate [%u]\n", config.baudrate);
+	fprintf(stderr, "  -d### set serial device [%s]\n", config.device);
 	fprintf(stderr, "  -h flash Hello World example\n");
 	fprintf(stderr, "  -f### set firmware directory [%s]\n", FIRMWARE_DIRECTORY);
 	fprintf(stderr, "  -p### set power [0=off 1=on 2=boot]\n");
@@ -72,12 +79,7 @@ int main(int argc, char *argv[])
 
     example_binaries_t bin;
 
-    loader_raspberry_config_t config = {
-        .device = SERIAL_DEVICE,
-        .baudrate = DEFAULT_BAUD_RATE,
-        .reset_trigger_pin = TARGET_RST_Pin,
-        .gpio0_trigger_pin = TARGET_IO0_Pin,
-    };
+	// try to read SERIAL_DEVICE from /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,boot-uart
 
 	char *arg0=argv[0];
 	while(argv[1] && argv[1][0] == '-') {
