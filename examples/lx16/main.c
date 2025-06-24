@@ -35,13 +35,12 @@
 /*
 
  root@letux:~# ls -l /lib/firmware/espressif/esp32-c6-wroom-1
- total 964
- -rw-r--r-- 1 502 root    422 Oct 29 12:49 NOTES
- -rw-r--r-- 1 502 root  21344 Oct 29 12:49 bootloader.bin
- -rwxr-xr-x 1 502 root   1316 Oct 29 12:49 flash-firmware.sh
- -rw-r--r-- 1 502 root 935184 Oct 29 12:49 network_adapter.bin
- -rw-r--r-- 1 502 root   8192 Oct 29 12:49 ota_data_initial.bin
- -rw-r--r-- 1 502 root   3072 Oct 29 12:49 partition-table.bin
+ total 1912
+ -rw-r--r--  1 hns  root      421  3 Dez  2024 NOTES
+ -rw-r--r--  1 hns  root    21344  3 Dez  2024 bootloader.bin
+ -rw-r--r--  1 hns  root   935664  3 Dez  2024 network_adapter.bin
+ -rw-r--r--  1 hns  root     8192  3 Dez  2024 ota_data_initial.bin
+ -rw-r--r--  1 hns  root     3072  3 Dez  2024 partition-table.bin
  root@letux:~#
 
  To flash, run this command:
