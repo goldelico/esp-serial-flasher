@@ -81,7 +81,7 @@ int gpioInitialise(void)
 
 #ifdef __mips__
 
-unsigned raspi2lx16(unsigned pin)
+int raspi2lx16(unsigned pin)
 {
 #define PA 0
 #define PB 1
@@ -92,12 +92,12 @@ unsigned raspi2lx16(unsigned pin)
 #define TARGET_IO0_Pin 3
 
 	switch(pin) {
-			// FIXME: read this from /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,power-gpio
-			// and /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,boot-gpio
+			// FIXME: read this from /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,boot-gpio
 
-		case TARGET_RST_Pin: return PB*32+4;	// PB4 espressif,power-gpio
-		case TARGET_IO0_Pin: return PB*32+5;	// PB5 espressif,boot-gpio
+//		case TARGET_RST_Pin: return PB*32+4;	// PB4
+		case TARGET_IO0_Pin: return PB*32+5;	// PB5
 	}
+	printf("raspi2lx16: invalid pin %u\n", pin);
 	return -1;
 }
 
@@ -146,6 +146,8 @@ void gpioTerminate(void)
 int gpioRead(unsigned pin)
 {
 #ifdef __mips__
+	if(raspi2lx16(pin) < 0)
+		return -1;
 	unsigned int lvl = lx16_read(raspi2lx16(pin), PxPINL);	// read
 //	printf("%s: pin %d level raw %08x\n", __func__, lvl);
 	lvl &= lx16_mask(raspi2lx16(pin));
@@ -158,10 +160,12 @@ int gpioRead(unsigned pin)
 
 int gpioSetMode(unsigned pin, unsigned mode)
 { // set gpio mode
-#if 0
+#if 1
 	printf("%s(%u, %u)\n", __func__, pin, mode);
 #endif
 #ifdef __mips__
+	if(raspi2lx16(pin) < 0)
+		return -1;
 
 	/*
 	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
@@ -192,7 +196,7 @@ int gpioSetMode(unsigned pin, unsigned mode)
 				return -1;
 		}
 
-	lx16_write(PZ*32, PxPAT0C, lx16_mask(raspi2lx16(TARGET_RST_Pin)));	// TARGET_RST_Pin = 0 as default (active high)
+//	lx16_write(PZ*32, PxPAT0C, lx16_mask(raspi2lx16(TARGET_RST_Pin)));	// TARGET_RST_Pin = 0 as default (active high)
 	lx16_write(PZ*32, PxPAT0S, lx16_mask(raspi2lx16(TARGET_IO0_Pin)));	// TARGET_IO0_Pin = 1 as default (active low)
 
 	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
@@ -212,12 +216,11 @@ int gpioSetMode(unsigned pin, unsigned mode)
 
 void gpioWrite(unsigned pin, unsigned level)
 {
-#if 0
+#if 1
 	printf("%s(%u, %u)\n", __func__, pin, level);
 #endif
 #ifdef __mips__
 
-#if 1
 	/*
 	 * Controlling power of the ESP32 on a running Linux system is quite tricky
 	 * if we directly control the EN GPIO, the mmc core will detect that the
@@ -241,43 +244,46 @@ void gpioWrite(unsigned pin, unsigned level)
 	 * - there is a special case when we do both
 	 */
 
-// 	printf("before: "); gpioRead(pin);	// current pin level
+	// 	printf("before: "); gpioRead(pin);	// current pin level
 
 	// nur wenn TARGET_IO0_Pin == 1 ist (also nicht fürs Flashing)
-	if(pin == TARGET_RST_Pin && (!level || gpioRead(TARGET_IO0_Pin)))
-		{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are controlling flashing mode
+	if(pin == TARGET_RST_Pin)
+		{
 		FILE *f;
-//		printf("%s\n", level? "bind" : "unbind");
-#if 1
-		if(level)
-			f=fopen("/sys/bus/platform/drivers/jz4740-mmc/bind", "w");
-		else
-			f=fopen("/sys/bus/platform/drivers/jz4740-mmc/unbind", "w");
-		fprintf(f, "%s\n", "13460000.mmc");	// mmc1 controls the GPIO
+		if(!level || gpioRead(TARGET_IO0_Pin))
+			{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are controlling flashing mode
+				//		printf("%s\n", level? "bind" : "unbind");
+#if 1	// more reliable version
+				if(level)
+					f=fopen("/sys/bus/platform/drivers/jz4740-mmc/bind", "w");
+				else
+					f=fopen("/sys/bus/platform/drivers/jz4740-mmc/unbind", "w");
+				fprintf(f, "%s\n", "13460000.mmc");	// mmc1 controls the GPIO
 #else	// is not as reliable
-		if(level)
-			f=fopen("/sys/bus/sdio/drivers/esp32_sdio/bind", "w");
-		else
-			f=fopen("/sys/bus/sdio/drivers/esp32_sdio/unbind", "w");
-		fprintf(f, "%s\n", "mmc1:0001:1");	// mmc1 controls the GPIO
+				if(level)
+					f=fopen("/sys/bus/sdio/drivers/esp32_sdio/bind", "w");
+				else
+					f=fopen("/sys/bus/sdio/drivers/esp32_sdio/unbind", "w");
+				fprintf(f, "%s\n", "mmc1:0001:1");	// mmc1 controls the GPIO
 #endif
+				fclose(f);
+				sleep(1);
+				//			printf("after: "); gpioRead(pin);	// current power level
+				if (level)
+					return;	// no need for manual control
+			}
+
+		f=fopen("/sys/devices/platform/wlan_pwrseq/manual_control", "w");
+		fprintf(f, "%d\n", level);	// directly control the wlan_pwrseq-gpio
 		fclose(f);
-//			printf("after: "); gpioRead(pin);	// current power level
-		if (level)
-			return;	// no need for manual control
+		sleep(1);
+		return;
 		}
-#endif
-
-	/*
-	 gpout 0: INT=0 MASK=1 PAT1=0 PAT0=0
-	 gpout 1: INT=0 MASK=1 PAT1=0 PAT0=1
-	 gpin:    INT=0 MASK=1 PAT1=1 PAT0=x
-	 */
-
 //	lx16_read(raspi2lx16(pin), PxPAT0);	// read
 
 	lx16_write(PZ*32, level ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to make it an GPIO = 1
 	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
+	sleep(1);
 
 //	lx16_read(raspi2lx16(pin), PxPAT0);	// read back
 #endif
