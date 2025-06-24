@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pigpio.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/param.h>
 #include "raspberry_port.h"
 #include "esp_loader.h"
@@ -82,6 +84,10 @@ int main(int argc, char *argv[])
 	// try to read SERIAL_DEVICE from /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,boot-uart
 
 	char *arg0=argv[0];
+
+	if(access(FIRMWARE_DIRECTORY, R_OK) < 0)
+		fdirectory="/usr/local/lib/firmware/espressif/esp32-c6-wroom-1";	// alternate default
+
 	while(argv[1] && argv[1][0] == '-') {
 		switch(argv[1][1])
 			{
