@@ -19,6 +19,9 @@
 #include <sys/types.h>
 #include <termios.h>
 
+#define TARGET_RST_Pin 2
+#define TARGET_IO0_Pin 3
+
 int fd;
 void *map_base;
 
@@ -88,8 +91,6 @@ int raspi2lx16(unsigned pin)
 #define PC 2
 #define PD 3
 #define PZ 7
-#define TARGET_RST_Pin 2
-#define TARGET_IO0_Pin 3
 
 	switch(pin) {
 			// FIXME: read this from /proc/device-tree/ahb2/mmc@13460000/wlan@0/espressif,boot-gpio
@@ -145,6 +146,29 @@ void gpioTerminate(void)
 
 int gpioRead(unsigned pin)
 {
+	char *file;
+	FILE *f;
+	int level = -EINVAL;
+	switch(pin)
+		{
+			case TARGET_RST_Pin: file="/sys/devices/platform/wlan_pwrseq/enable_power"; break;
+			case TARGET_IO0_Pin: file="/sys/devices/platform/wlan_pwrseq/enable_flashing"; break;
+			default:
+				fprintf(stderr, "unknown pin %u\n", pin);
+				return -EINVAL;
+		}
+	f=fopen(file, "r");
+	if(!f)
+		{
+		perror(file);
+		return -EINVAL;
+		}
+	fscanf(f, "%d", &level);	// directly control the wlan_pwrseq-gpio
+	fclose(f);
+	if (pin == TARGET_IO0_Pin)
+		level=!level;	// inverted logic - returning 1 means "disable flashing"
+	return level;
+
 #ifdef __mips__
 	if(raspi2lx16(pin) < 0)
 		return -1;
@@ -163,6 +187,7 @@ int gpioSetMode(unsigned pin, unsigned mode)
 #if 1
 	printf("%s(%u, %u)\n", __func__, pin, mode);
 #endif
+	return 0;	// ignore
 #ifdef __mips__
 	if(raspi2lx16(pin) < 0)
 		return -1;
@@ -214,10 +239,10 @@ int gpioSetMode(unsigned pin, unsigned mode)
 	return 0;
 }
 
-void gpioWrite(unsigned pin, unsigned level)
+void gpioWrite(unsigned pin, unsigned value)
 {
 #if 1
-	printf("%s(%u, %u)\n", __func__, pin, level);
+	printf("%s(%u, %u)\n", __func__, pin, value);
 #endif
 #ifdef __mips__
 
@@ -246,42 +271,72 @@ void gpioWrite(unsigned pin, unsigned level)
 
 	// 	printf("before: "); gpioRead(pin);	// current pin level
 
-	// nur wenn TARGET_IO0_Pin == 1 ist (also nicht fürs Flashing)
-	if(pin == TARGET_RST_Pin)
-		{
-		FILE *f;
-		if(!level || gpioRead(TARGET_IO0_Pin))
-			{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are controlling flashing mode
-				//		printf("%s\n", level? "bind" : "unbind");
+	char *file;
+	FILE *f;
+	switch(pin) {
+		case TARGET_RST_Pin: {
+			if(!value || gpioRead(TARGET_IO0_Pin))
+				{ // control gpio through mmc-pwrseq-simple or some regulator - unless we are controlling flashing mode
+				  //		printf("%s\n", value? "bind" : "unbind");
 #if 1	// more reliable version
-				if(level)
-					f=fopen("/sys/bus/platform/drivers/jz4740-mmc/bind", "w");
-				else
-					f=fopen("/sys/bus/platform/drivers/jz4740-mmc/unbind", "w");
-				fprintf(f, "%s\n", "13460000.mmc");	// mmc1 controls the GPIO
+					if(value)
+						file="/sys/bus/platform/drivers/jz4740-mmc/bind";
+					else
+						file="/sys/bus/platform/drivers/jz4740-mmc/unbind";
+					f=fopen(file, "w");
+					if(!f) {
+						perror(file);
+						exit(1);
+					}
+					fprintf(f, "%s\n", "13460000.mmc");	// mmc1 controls the GPIO
 #else	// is not as reliable
-				if(level)
-					f=fopen("/sys/bus/sdio/drivers/esp32_sdio/bind", "w");
-				else
-					f=fopen("/sys/bus/sdio/drivers/esp32_sdio/unbind", "w");
-				fprintf(f, "%s\n", "mmc1:0001:1");	// mmc1 controls the GPIO
+					if(value)
+						file="/sys/bus/sdio/drivers/esp32_sdio/bind";
+					else
+						file="/sys/bus/sdio/drivers/esp32_sdio/unbind";
+					f=fopen(file, "w");
+					if(!f) {
+						perror(file);
+						exit(1);
+					}
+					fprintf(f, "%s\n", "mmc1:0001:1");	// mmc1 controls the GPIO
 #endif
-				fclose(f);
-				sleep(1);
-				//			printf("after: "); gpioRead(pin);	// current power level
-				if (level)
-					return;	// no need for manual control
-			}
+					fclose(f);
+					sleep(1);
+					//			printf("after: "); gpioRead(pin);	// current power level
+					if (value)
+						return;	// no need for manual control
+				}
 
-		f=fopen("/sys/devices/platform/wlan_pwrseq/manual_control", "w");
-		fprintf(f, "%d\n", level);	// directly control the wlan_pwrseq-gpio
-		fclose(f);
-		sleep(1);
-		return;
+			file="/sys/devices/platform/wlan_pwrseq/enable_power";
+			f=fopen(file, "w");
+			if(!f) {
+				perror(file);
+				exit(1);
+			}
+			fprintf(f, "%d\n", value);	// directly control the wlan_pwrseq-gpio
+			fclose(f);
+			return;
 		}
+		case TARGET_IO0_Pin: {
+			file="/sys/devices/platform/wlan_pwrseq/enable_flashing";
+			f=fopen(file, "w");
+			if(!f) {
+				perror(file);
+				exit(1);
+			}
+			// value = 0 means "active", i.e. set to 1
+			fprintf(f, "%d\n", !value);	// directly control the wlan_pwrseq-gpio
+			fclose(f);
+			return;
+		}
+	}
+	fprintf(stderr, "unknown pin %u\n", pin);
+	return;
+
 //	lx16_read(raspi2lx16(pin), PxPAT0);	// read
 
-	lx16_write(PZ*32, level ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to make it an GPIO = 1
+	lx16_write(PZ*32, value ? PxPAT0S : PxPAT0C, lx16_mask(raspi2lx16(pin)));	// set PAT0 to make it an GPIO = 1
 	lx16_write(PZ*32, PzGID2LD, PB);	// commit changes for PB
 	sleep(1);
 
