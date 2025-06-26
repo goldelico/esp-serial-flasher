@@ -75,6 +75,7 @@ int helloworld=0;
 
 int main(int argc, char *argv[])
 {
+	FILE *f;
 	char *pmode=NULL;
 	char *fdirectory=FIRMWARE_DIRECTORY;
 
@@ -85,7 +86,17 @@ int main(int argc, char *argv[])
 	char *arg0=argv[0];
 
 	if(access(FIRMWARE_DIRECTORY, R_OK) < 0)
-		fdirectory="/usr/local/lib/firmware/espressif/esp32-c6-wroom-1";	// alternate default
+		fdirectory="/usr/local/lib/firmware/espressif/esp32-c6-wroom-1";	// alternate default built into package
+
+	f=fopen("/sys/devices/platform/wlan_pwrseq/flashing-uart", "r");
+	if(f)
+		{ // read uart from device tree
+		static char path[256];
+		if(fread(path, sizeof(char), sizeof(path), f) == sizeof(path))
+			config.device=path;
+		fclose(f);
+		fprintf(stderr, "  -d changed to %s\n", config.device);
+		}
 
 	while(argv[1] && argv[1][0] == '-') {
 		switch(argv[1][1])
