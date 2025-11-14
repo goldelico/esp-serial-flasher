@@ -72,7 +72,7 @@ int gpioRead(unsigned pin)
 
 int gpioSetMode(unsigned pin, unsigned mode)
 { // set gpio mode
-#if 0
+#if 1
 	printf("%s(%u, %u)\n", __func__, pin, mode);
 #endif
 	return 0;	// ignore (should have been et by pwrseq_esp32 driver in kernel)
@@ -80,7 +80,7 @@ int gpioSetMode(unsigned pin, unsigned mode)
 
 void gpioWrite(unsigned pin, unsigned value)
 {
-#if 0
+#if 1
 	printf("%s(%u, %u)\n", __func__, pin, value);
 #endif
 #ifdef __APPLE__
@@ -122,7 +122,6 @@ void gpioWrite(unsigned pin, unsigned value)
 						file="/sys/bus/platform/drivers/jz4740-mmc/bind";
 					else
 						file="/sys/bus/platform/drivers/jz4740-mmc/unbind";
-					printf("%s jz4740-mmc\n", &file[strlen("/sys/bus/platform/drivers/jz4740-mmc/")]);	// hackish...
 					f=fopen(file, "w");
 					if(!f) {
 						perror(file);
@@ -133,10 +132,9 @@ void gpioWrite(unsigned pin, unsigned value)
 					sleep(1);
 					//			printf("after: "); gpioRead(pin);	// current power level
 					if (value)
-						return;	// no need for manual control, jz4740-mmc will enable power
+						return;	// no need for manual control
 				}
 
-			printf("%s power\n", value?"enable":"disable");
 			file="/sys/devices/platform/wlan_pwrseq/enable_power";
 			f=fopen(file, "w");
 			if(!f) {
@@ -148,7 +146,6 @@ void gpioWrite(unsigned pin, unsigned value)
 			return;
 		}
 		case TARGET_IO0_Pin: {
-			printf("%s flashing mode\n", value?"default":"request");
 			file="/sys/devices/platform/wlan_pwrseq/enable_flashing";
 			f=fopen(file, "w");
 			if(!f) {
