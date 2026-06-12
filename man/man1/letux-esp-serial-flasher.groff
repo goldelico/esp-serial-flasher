@@ -1,17 +1,23 @@
 .\" Manpage for letux-esp-serial-flasher
 .\" Contact letux-kernel@openphoenux.org to correct errors or typos.
-.TH man 1 "06 May 2010" "1.0" "letux-esp-serial-flasher man page"
+.TH man 1 "11 June 2026" "1.0" "letux-esp-serial-flasher man page"
 .SH NAME
 letux-esp-serial-flasher \- tool to flash embedded ESP32-C6-WROOM-1 with esp-host-ng firmware in-circuit for Linux
 .SH SYNOPSIS
-/usr/local/bin/mipsel-linux-gnu/letux-esp-serial-flasher [USERNAME]
+/usr/local/bin/mipsel-linux-gnu/letux-esp-serial-flasher [-bbaud] [-d/dev/ttyS#] [-ffirmware] [-w] [-p0-2]
 .SH DESCRIPTION
-letux-esp-serial-flasher is a testme.
+letux-esp-serial-flasher is a tool to flash the ESP32C6 of the LX16 and derived boards.
 .SH OPTIONS
 The letux-esp-serial-flasher takes some options.
+-b### set baud rate [115200]
+-d### set serial device [/dev/ttyS1]
+-w flash 'Hello World' example instead of the firmware
+-f### set firmware directory [/lib/firmware/espressif/esp32-c6-wroom-1]
+-p### set power [0=off 1=on 2=boot]
 .SH FILES
-Firmware is stored in /usr/local/lib/firmware/espressif/esp32-c6-wroom-1
-Access to device tree required /proc/device-tree/...
+Firmware is stored in /usr/local/lib/firmware/espressif/esp32-c6-wroom-1 (unless overwritten by -f)
+Access to device tree is required /proc/device-tree/...
+A serial port /dev/ttyS1 (unless overwritten by -d) to the UART pins
 .SH HARDWARE
 requires sdio connection to device plus UART and control GPIOs.
 .SH SEE ALSO

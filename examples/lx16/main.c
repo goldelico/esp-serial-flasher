@@ -62,10 +62,10 @@ static loader_raspberry_config_t config = {
 
 void usage(char *arg0)
 {
-	fprintf(stderr, "usage: %s [-bbaud] [-d/dev/tty] [-ffirmware] [-h] [-p0-2]\n", arg0);
+	fprintf(stderr, "usage: %s [-bbaud] [-d/dev/tty#] [-ffirmware] [-w] [-p0-2]\n", arg0);
 	fprintf(stderr, "  -b### set baud rate [%u]\n", config.baudrate);
 	fprintf(stderr, "  -d### set serial device [%s]\n", config.device);
-	fprintf(stderr, "  -h flash Hello World example\n");
+	fprintf(stderr, "  -w flash 'Hello World' example\n");
 	fprintf(stderr, "  -f### set firmware directory [%s]\n", FIRMWARE_DIRECTORY);
 	fprintf(stderr, "  -p### set power [0=off 1=on 2=boot]\n");
 	exit(1);
@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 				case 'b': config.baudrate=atoi(argv[1]+2); argv++; break;
 				case 'd': config.device=argv[1]+2; argv++; break;
 				case 'f': fdirectory=argv[1]+2; argv++; break;
-				case 'h': helloworld=1; argv++; break;
+				case 'w': helloworld=1; argv++; break;
 				case 'p': pmode=argv[1]+2; argv++; break;
 				default: usage(arg0);
 			}
